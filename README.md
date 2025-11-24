@@ -23,6 +23,7 @@ Create a new DID.
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -30,7 +31,14 @@ import (
 )
 
 func main() {
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -40,12 +48,32 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = controller.RegisterDID()
+	// Create unregistered DID
+	did, err := controller.CreateUnregisteredDID("EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey))
 	if err != nil {
 		panic(err.Error())
 	}
 
-	log.Println(controller.DID())
+	// Get message to be signed
+	message, err := controller.GetRegisterMessage(did, "EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey))
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Register DID
+	err = controller.RegisterDID(did, "EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey), signature)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	log.Println(did.String())
 }
 ```
 
@@ -93,6 +121,9 @@ It is possible to add new verification methods to an existing Memo DID.
 package main
 
 import (
+	"encoding/hex"
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -100,12 +131,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -114,7 +152,28 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	err = controller.AddVerificationMethod("EcdsaSecp256k1VerificationKey2019", *DID, "0x02d78b20654eb7a5d58d83b25d090a338eff18f0b5f919777c9d894c2e161b4b52")
+
+	publicKeyHex := "0x02d78b20654eb7a5d58d83b25d090a338eff18f0b5f919777c9d894c2e161b4b52"
+	publicKeyBytes, err := hex.DecodeString(publicKeyHex[2:]) // Remove 0x prefix
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Get message to be signed
+	message, err := controller.GetAddVerificationMethodMessage(DID, "EcdsaSecp256k1VerificationKey2019", *DID, publicKeyBytes)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Add verification method
+	err = controller.AddVerificationMethod(DID, "EcdsaSecp256k1VerificationKey2019", *DID, publicKeyBytes, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -129,6 +188,9 @@ Existing authentication methods can be modified.
 package main
 
 import (
+	"encoding/hex"
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -136,12 +198,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -151,7 +220,28 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(1)
-	err = controller.UpdateVerificationMethod(didUrl, "EcdsaSecp256k1VerificationKey2019", "0x03d21e6c4843fa3f5d019e551131106e2075925b01da2a83dc177879a512eb608f")
+
+	publicKeyHex := "0x03d21e6c4843fa3f5d019e551131106e2075925b01da2a83dc177879a512eb608f"
+	publicKeyBytes, err := hex.DecodeString(publicKeyHex[2:]) // Remove 0x prefix
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Get message to be signed
+	message, err := controller.GetUpdateVerificationMethodMessage(didUrl, "EcdsaSecp256k1VerificationKey2019", publicKeyBytes)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Update verification method
+	err = controller.UpdateVerificationMethod(didUrl, "EcdsaSecp256k1VerificationKey2019", publicKeyBytes, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -166,6 +256,8 @@ You can delete existing authentication methods.
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -173,12 +265,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -188,7 +287,22 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(1)
-	err = controller.DeactivateVerificationMethod(didUrl)
+
+	// Get message to be signed
+	message, err := controller.GetDeactivateVerificationMethodMessage(didUrl)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Deactivate verification method
+	err = controller.DeactivateVerificationMethod(didUrl, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -203,6 +317,8 @@ After creating a Memo DID, you can add a new login verification method, which in
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -210,12 +326,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -225,7 +348,22 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(0)
-	err = controller.AddRelationShip(types.Authentication, didUrl, 0)
+
+	// Get message to be signed
+	message, err := controller.GetAddRelationShipMessage(DID, types.Authentication, didUrl, 0)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Add relation ship
+	err = controller.AddRelationShip(DID, types.Authentication, didUrl, 0, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -240,6 +378,8 @@ You can delete an existing login method. After the deletion is successful, you w
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -247,12 +387,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -262,7 +409,22 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(0)
-	err = controller.DeactivateRelationShip(types.Authentication, didUrl)
+
+	// Get message to be signed
+	message, err := controller.GetDeactivateRelationShipMessage(DID, types.Authentication, didUrl)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Deactivate relation ship
+	err = controller.DeactivateRelationShip(DID, types.Authentication, didUrl, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -277,6 +439,8 @@ After creating a Memo DID, you can add a new proxy access verification method, w
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -284,12 +448,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -299,7 +470,22 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(0)
-	err = controller.AddRelationShip(types.CapabilityDelegation, didUrl, 0)
+
+	// Get message to be signed
+	message, err := controller.GetAddRelationShipMessage(DID, types.CapabilityDelegation, didUrl, 0)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Add relation ship
+	err = controller.AddRelationShip(DID, types.CapabilityDelegation, didUrl, 0, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -314,6 +500,8 @@ The original proxy access verification method can be deleted. After the deletion
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -321,12 +509,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -336,7 +531,22 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(0)
-	err = controller.DeactivateRelationShip(types.CapabilityDelegation, didUrl)
+
+	// Get message to be signed
+	message, err := controller.GetDeactivateRelationShipMessage(DID, types.CapabilityDelegation, didUrl)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Deactivate relation ship
+	err = controller.DeactivateRelationShip(DID, types.CapabilityDelegation, didUrl, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -346,6 +556,8 @@ func main() {
 ### Purchase read permissions
 
 You can purchase the read permission of private files by paying. After purchasing the read permission, memo did will be added to the read field of mfile did, so that you can request the file corresponding to mfile did offline. Before purchasing the read permission, you need to call the approve method.
+
+**Note:** `ApproveOfMfileContract` and `BuyReadPermission` methods are currently commented out in the memo controller. Please check the implementation for the latest API.
 
 ```go
 package main
@@ -363,22 +575,24 @@ func main() {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
 
 	mfiledid, _ := types.ParseMfileDID("did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4")
+	memoDID, _ := types.ParseMemoDID(did)
 
-	err = controller.ApproveOfMfileContract(1000)
-	if err != nil {
-		panic(err.Error())
-	}
+	// Note: These methods are currently commented out
+	// err = controller.ApproveOfMfileContract(1000)
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
 
-	err = controller.BuyReadPermission(*mfiledid)
-	if err != nil {
-		panic(err.Error())
-	}
+	// err = controller.BuyReadPermission(*mfiledid, memoDID)
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
 }
 ```
 
@@ -390,23 +604,52 @@ Delete the created DID. Once deleted, the DID will be unavailable and cannot be 
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
+	"github.com/memoio/go-did/types"
 )
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	err = controller.DeactivateDID()
+	controller, err := memo.NewMemoDIDController(sk, "dev")
+	if err != nil {
+		panic(err.Error())
+	}
+
+	DID, err := types.ParseMemoDID(did)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Get message to be signed
+	message, err := controller.GetDeactivateDIDMessage(DID)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Deactivate DID
+	err = controller.DeactivateDID(DID, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -428,6 +671,7 @@ Create a new Mfile DID.
 package main
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -437,7 +681,14 @@ import (
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -447,9 +698,24 @@ func main() {
 		panic(err.Error())
 	}
 
+	mfileDID, _ := types.ParseMfileDID(did)
 	memodid, _ := types.ParseMemoDID("did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96")
 
-	err = controller.RegisterDID("mid", 0, big.NewInt(50), []string{"memo", "example"}, *memodid)
+	// Get message to be signed
+	message, err := controller.GetRegisterDIDMessage(mfileDID, "mid", 0, big.NewInt(50), []string{"memo", "example"}, *memodid)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Register DID
+	err = controller.RegisterDID(mfileDID, "mid", 0, big.NewInt(50), []string{"memo", "example"}, *memodid, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -464,6 +730,8 @@ The owner of Mfile DID can transfer the Mfile DID by changing the owner.
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
 	"github.com/memoio/go-did/types"
@@ -471,7 +739,14 @@ import (
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -481,9 +756,24 @@ func main() {
 		panic(err.Error())
 	}
 
+	mfileDID, _ := types.ParseMfileDID(did)
 	memodid, _ := types.ParseMemoDID("did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96")
 
-	err = controller.ChangeController(*memodid)
+	// Get message to be signed
+	message, err := controller.GetChangeControllerMessage(mfileDID, *memodid)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Change controller
+	err = controller.ChangeController(mfileDID, *memodid, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -498,13 +788,23 @@ The files corresponding to Mfile DID include public files and private files. You
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
+	"github.com/memoio/go-did/types"
 )
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -514,7 +814,23 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = controller.ChangeFileType(1)
+	mfileDID, _ := types.ParseMfileDID(did)
+
+	// Get message to be signed
+	message, err := controller.GetChangeFileTypeMessage(mfileDID, 1)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Change file type
+	err = controller.ChangeFileType(mfileDID, 1, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -527,15 +843,24 @@ func main() {
 package main
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
+	"github.com/memoio/go-did/types"
 )
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -545,7 +870,23 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = controller.ChangePrice(big.NewInt(25))
+	mfileDID, _ := types.ParseMfileDID(did)
+
+	// Get message to be signed
+	message, err := controller.GetChangePriceMessage(mfileDID, big.NewInt(25))
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Change price
+	err = controller.ChangePrice(mfileDID, big.NewInt(25), signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -560,13 +901,23 @@ The keywords of the file are used to search for the file. You can change the key
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
+	"github.com/memoio/go-did/types"
 )
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -576,7 +927,23 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = controller.ChangeKeywords([]string{"movie", "china"})
+	mfileDID, _ := types.ParseMfileDID(did)
+
+	// Get message to be signed
+	message, err := controller.GetChangeKeywordsMessage(mfileDID, []string{"movie", "china"})
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Change keywords
+	err = controller.ChangeKeywords(mfileDID, []string{"movie", "china"}, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -591,6 +958,8 @@ When the file displayed by the Mfile DID is a private file, other Memo DID owner
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
 	"github.com/memoio/go-did/types"
@@ -598,7 +967,14 @@ import (
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -608,9 +984,24 @@ func main() {
 		panic(err.Error())
 	}
 
+	mfileDID, _ := types.ParseMfileDID(did)
 	memodid, _ := types.ParseMemoDID("did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96")
 
-	err = controller.AddRelationShip(types.Read, *memodid)
+	// Get message to be signed
+	message, err := controller.GetAddRelationShipMessage(mfileDID, types.Read, *memodid)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Add relation ship
+	err = controller.AddRelationShip(mfileDID, types.Read, *memodid, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -625,6 +1016,8 @@ You can revoke previously granted read permissions, but you cannot revoke read p
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
 	"github.com/memoio/go-did/types"
@@ -632,7 +1025,14 @@ import (
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -642,9 +1042,24 @@ func main() {
 		panic(err.Error())
 	}
 
+	mfileDID, _ := types.ParseMfileDID(did)
 	memodid, _ := types.ParseMemoDID("did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96")
 
-	err = controller.DeactivateRelationShip(types.Read, *memodid)
+	// Get message to be signed
+	message, err := controller.GetDeactivateRelationShipMessage(mfileDID, types.Read, *memodid)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Deactivate relation ship
+	err = controller.DeactivateRelationShip(mfileDID, types.Read, *memodid, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -659,13 +1074,23 @@ Delete Mfile DID.
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
+	"github.com/memoio/go-did/types"
 )
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// Used for signing transactions and paying gas fees
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Used for signing user operations, the owner of the DID
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -675,7 +1100,23 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = controller.DeactivateDID()
+	mfileDID, _ := types.ParseMfileDID(did)
+
+	// Get message to be signed
+	message, err := controller.GetDeactivateDIDMessage(mfileDID)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Sign the message using EIP-191
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Deactivate DID
+	err = controller.DeactivateDID(mfileDID, signature)
 	if err != nil {
 		panic(err.Error())
 	}

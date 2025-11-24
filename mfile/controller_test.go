@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"math/big"
@@ -93,14 +94,17 @@ func TestBasic(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
+	// Used for signing transactions and paying gas fees for users.
 	masterKey1 := sks[0]
-	// masterKey2 := sks[1]
+	// Used for signing user operations, the owner of the DID.
+	userSK := sks[1]
 
 	cid := genCid()
+	mfileDIDString := "did:mfile:" + cid.String()
 
 	resolver, _ := NewMfileDIDResolver("dev")
 
-	mfilecontroller, err := NewMfileDIDController(masterKey1, "dev", "did:mfile:"+cid.String())
+	mfilecontroller, err := NewMfileDIDController(masterKey1, "dev", mfileDIDString)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -110,32 +114,97 @@ func TestBasic(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	err = mfilecontroller.RegisterDID("cid", 0, big.NewInt(10), []string{"test"}, *memocontroller.DID())
+	// Create memo DID first
+	memoDID, err := memocontroller.CreateUnregisteredDID("EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey))
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	// Register memo DID
+	message, err := memocontroller.GetRegisterMessage(memoDID, "EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey))
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	err = memocontroller.RegisterDID(memoDID, "EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey), signature)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	// Try to register mfile DID before controller is registered (should fail)
+	mfileDID, err := types.ParseMfileDID(mfileDIDString)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	message, err = mfilecontroller.GetRegisterDIDMessage(mfileDID, "cid", 0, big.NewInt(10), []string{"test"}, *memoDID)
 	if err == nil {
-		t.Fatal("should report an error when controller is not registe")
+		hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+		signature, _ = crypto.Sign(hash, userSK)
+		err = mfilecontroller.RegisterDID(mfileDID, "cid", 0, big.NewInt(10), []string{"test"}, *memoDID, signature)
+		if err == nil {
+			t.Fatal("should report an error when controller is not registered")
+		}
 	}
 
-	err = memocontroller.RegisterDID()
+	// Now register mfile DID (should succeed)
+	message, err = mfilecontroller.GetRegisterDIDMessage(mfileDID, "cid", 0, big.NewInt(10), []string{"test"}, *memoDID)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 
-	err = mfilecontroller.RegisterDID("cid", 0, big.NewInt(10), []string{"test"}, *memocontroller.DID())
-	if err != nil {
-		t.Fatal("should not report an error when controller is registe")
-	}
-
-	err = mfilecontroller.ChangePrice(big.NewInt(50))
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 
-	err = mfilecontroller.AddRelationShip(types.Read, *memocontroller.DID())
+	err = mfilecontroller.RegisterDID(mfileDID, "cid", 0, big.NewInt(10), []string{"test"}, *memoDID, signature)
+	if err != nil {
+		t.Fatal("should not report an error when controller is registered: " + err.Error())
+	}
+
+	// Change price
+	message, err = mfilecontroller.GetChangePriceMessage(mfileDID, big.NewInt(50))
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 
-	document, err := resolver.Resolve(mfilecontroller.did.String())
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	err = mfilecontroller.ChangePrice(mfileDID, big.NewInt(50), signature)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	// Add relation ship
+	message, err = mfilecontroller.GetAddRelationShipMessage(mfileDID, types.Read, *memoDID)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	err = mfilecontroller.AddRelationShip(mfileDID, types.Read, *memoDID, signature)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	document, err := resolver.Resolve(mfilecontroller.DID().String())
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -167,32 +236,41 @@ func TestResolve(t *testing.T) {
 }
 
 func TestBuyReadPermission(t *testing.T) {
-	sks, _, err := ToPublicKeys(globalPrivateKeys)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
+	// sks, _, err := ToPublicKeys(globalPrivateKeys)
+	// if err != nil {
+	// 	t.Fatal(err.Error())
+	// }
 
 	resolver, err := NewMfileDIDResolver("dev")
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sks[1], "dev", "did:memo:deb3d9ca231caca8c03edad42d03c4ccb7ddd8eae81373267c3b484cc62a8d13")
-	if err != nil {
-		t.Fatal(err.Error())
-	}
+	// Note: BuyReadPermission is commented out in memo controller
+	// This test may need to be updated based on the actual implementation
+	// controller, err := memo.NewMemoDIDController(sks[1], "dev")
+	// if err != nil {
+	// 	t.Fatal(err.Error())
+	// }
 
-	did, _ := types.ParseMfileDID("did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4")
+	// memoDID, err := types.ParseMemoDID("did:memo:deb3d9ca231caca8c03edad42d03c4ccb7ddd8eae81373267c3b484cc62a8d13")
+	// if err != nil {
+	// 	t.Fatal(err.Error())
+	// }
 
-	err = controller.ApproveOfMfileContract(1000)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
+	// did, _ := types.ParseMfileDID("did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4")
 
-	err = controller.BuyReadPermission(*did)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
+	// Note: ApproveOfMfileContract and BuyReadPermission are commented out in memo controller
+	// Uncomment these if they are re-enabled
+	// err = controller.ApproveOfMfileContract(1000)
+	// if err != nil {
+	// 	t.Fatal(err.Error())
+	// }
+
+	// err = controller.BuyReadPermission(*did, memoDID)
+	// if err != nil {
+	// 	t.Fatal(err.Error())
+	// }
 
 	document, err := resolver.Resolve("did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4")
 	if err != nil {

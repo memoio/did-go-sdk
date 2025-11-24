@@ -23,6 +23,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -30,7 +31,14 @@ import (
 )
 
 func main() {
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -40,12 +48,32 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = controller.RegisterDID()
+	// 创建未注册的DID
+	did, err := controller.CreateUnregisteredDID("EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey))
 	if err != nil {
 		panic(err.Error())
 	}
 
-	log.Println(controller.DID())
+	// 获取需要签名的消息
+	message, err := controller.GetRegisterMessage(did, "EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey))
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 注册DID
+	err = controller.RegisterDID(did, "EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey), signature)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	log.Println(did.String())
 }
 ```
 
@@ -93,6 +121,9 @@ func main() {
 package main
 
 import (
+	"encoding/hex"
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -100,12 +131,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -114,7 +152,28 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	err = controller.AddVerificationMethod("EcdsaSecp256k1VerificationKey2019", *DID, "0x02d78b20654eb7a5d58d83b25d090a338eff18f0b5f919777c9d894c2e161b4b52")
+
+	publicKeyHex := "0x02d78b20654eb7a5d58d83b25d090a338eff18f0b5f919777c9d894c2e161b4b52"
+	publicKeyBytes, err := hex.DecodeString(publicKeyHex[2:]) // 移除0x前缀
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 获取需要签名的消息
+	message, err := controller.GetAddVerificationMethodMessage(DID, "EcdsaSecp256k1VerificationKey2019", *DID, publicKeyBytes)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 添加验证方法
+	err = controller.AddVerificationMethod(DID, "EcdsaSecp256k1VerificationKey2019", *DID, publicKeyBytes, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -129,6 +188,9 @@ func main() {
 package main
 
 import (
+	"encoding/hex"
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -136,12 +198,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -151,7 +220,28 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(1)
-	err = controller.UpdateVerificationMethod(didUrl, "EcdsaSecp256k1VerificationKey2019", "0x03d21e6c4843fa3f5d019e551131106e2075925b01da2a83dc177879a512eb608f")
+
+	publicKeyHex := "0x03d21e6c4843fa3f5d019e551131106e2075925b01da2a83dc177879a512eb608f"
+	publicKeyBytes, err := hex.DecodeString(publicKeyHex[2:]) // 移除0x前缀
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 获取需要签名的消息
+	message, err := controller.GetUpdateVerificationMethodMessage(didUrl, "EcdsaSecp256k1VerificationKey2019", publicKeyBytes)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 更新验证方法
+	err = controller.UpdateVerificationMethod(didUrl, "EcdsaSecp256k1VerificationKey2019", publicKeyBytes, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -166,6 +256,8 @@ func main() {
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -173,12 +265,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -188,7 +287,22 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(1)
-	err = controller.DeactivateVerificationMethod(didUrl)
+
+	// 获取需要签名的消息
+	message, err := controller.GetDeactivateVerificationMethodMessage(didUrl)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 停用验证方法
+	err = controller.DeactivateVerificationMethod(didUrl, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -203,6 +317,8 @@ func main() {
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -210,12 +326,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -225,7 +348,22 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(0)
-	err = controller.AddRelationShip(types.Authentication, didUrl, 0)
+
+	// 获取需要签名的消息
+	message, err := controller.GetAddRelationShipMessage(DID, types.Authentication, didUrl, 0)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 添加关系
+	err = controller.AddRelationShip(DID, types.Authentication, didUrl, 0, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -240,6 +378,8 @@ func main() {
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -247,12 +387,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -262,7 +409,22 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(0)
-	err = controller.DeactivateRelationShip(types.Authentication, didUrl)
+
+	// 获取需要签名的消息
+	message, err := controller.GetDeactivateRelationShipMessage(DID, types.Authentication, didUrl)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 停用关系
+	err = controller.DeactivateRelationShip(DID, types.Authentication, didUrl, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -277,6 +439,8 @@ func main() {
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -284,12 +448,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -299,7 +470,22 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(0)
-	err = controller.AddRelationShip(types.CapabilityDelegation, didUrl, 0)
+
+	// 获取需要签名的消息
+	message, err := controller.GetAddRelationShipMessage(DID, types.CapabilityDelegation, didUrl, 0)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 添加关系
+	err = controller.AddRelationShip(DID, types.CapabilityDelegation, didUrl, 0, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -314,6 +500,8 @@ func main() {
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
 	"github.com/memoio/go-did/types"
@@ -321,12 +509,19 @@ import (
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -336,7 +531,22 @@ func main() {
 		panic(err.Error())
 	}
 	didUrl, _ := DID.DIDUrl(0)
-	err = controller.DeactivateRelationShip(types.CapabilityDelegation, didUrl)
+
+	// 获取需要签名的消息
+	message, err := controller.GetDeactivateRelationShipMessage(DID, types.CapabilityDelegation, didUrl)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 停用关系
+	err = controller.DeactivateRelationShip(DID, types.CapabilityDelegation, didUrl, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -346,6 +556,8 @@ func main() {
 ### 购买读权限
 
 能够通过付费的方式购买私有文件的读权限。在购买读权限后，会将memo did添加到mfile did的read字段中，从而能够线下请求mfile did对应的文件。在购买读权限之前，需要调用approve方法。
+
+**注意：** `ApproveOfMfileContract` 和 `BuyReadPermission` 方法目前在 memo controller 中已被注释。请查看实现以获取最新的 API。
 
 ```go
 package main
@@ -363,22 +575,24 @@ func main() {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	controller, err := memo.NewMemoDIDController(sk, "dev")
 	if err != nil {
 		panic(err.Error())
 	}
 
 	mfiledid, _ := types.ParseMfileDID("did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4")
+	memoDID, _ := types.ParseMemoDID(did)
 
-	err = controller.ApproveOfMfileContract(1000)
-	if err != nil {
-		panic(err.Error())
-	}
+	// 注意：这些方法目前已被注释
+	// err = controller.ApproveOfMfileContract(1000)
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
 
-	err = controller.BuyReadPermission(*mfiledid)
-	if err != nil {
-		panic(err.Error())
-	}
+	// err = controller.BuyReadPermission(*mfiledid, memoDID)
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
 }
 ```
 
@@ -390,23 +604,52 @@ func main() {
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/memo"
+	"github.com/memoio/go-did/types"
 )
 
 func main() {
 	did := "did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	controller, err := memo.NewMemoDIDControllerWithDID(sk, "dev", did)
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	err = controller.DeactivateDID()
+	controller, err := memo.NewMemoDIDController(sk, "dev")
+	if err != nil {
+		panic(err.Error())
+	}
+
+	DID, err := types.ParseMemoDID(did)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 获取需要签名的消息
+	message, err := controller.GetDeactivateDIDMessage(DID)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 停用DID
+	err = controller.DeactivateDID(DID, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -427,6 +670,7 @@ func main() {
 package main
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -436,7 +680,14 @@ import (
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -446,9 +697,24 @@ func main() {
 		panic(err.Error())
 	}
 
+	mfileDID, _ := types.ParseMfileDID(did)
 	memodid, _ := types.ParseMemoDID("did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96")
 
-	err = controller.RegisterDID("mid", 0, big.NewInt(50), []string{"memo", "example"}, *memodid)
+	// 获取需要签名的消息
+	message, err := controller.GetRegisterDIDMessage(mfileDID, "mid", 0, big.NewInt(50), []string{"memo", "example"}, *memodid)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 注册DID
+	err = controller.RegisterDID(mfileDID, "mid", 0, big.NewInt(50), []string{"memo", "example"}, *memodid, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -463,6 +729,8 @@ Mfile DID的所有者可以通过更改所有者的方式，将Mfile DID实现�
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
 	"github.com/memoio/go-did/types"
@@ -470,7 +738,14 @@ import (
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -480,9 +755,24 @@ func main() {
 		panic(err.Error())
 	}
 
+	mfileDID, _ := types.ParseMfileDID(did)
 	memodid, _ := types.ParseMemoDID("did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96")
 
-	err = controller.ChangeController(*memodid)
+	// 获取需要签名的消息
+	message, err := controller.GetChangeControllerMessage(mfileDID, *memodid)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 更改控制器
+	err = controller.ChangeController(mfileDID, *memodid, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -497,13 +787,23 @@ Mfile DID对应的文件包括公开文件以及私有文件，可以通过该�
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
+	"github.com/memoio/go-did/types"
 )
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -513,7 +813,23 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = controller.ChangeFileType(1)
+	mfileDID, _ := types.ParseMfileDID(did)
+
+	// 获取需要签名的消息
+	message, err := controller.GetChangeFileTypeMessage(mfileDID, 1)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 更改文件类型
+	err = controller.ChangeFileType(mfileDID, 1, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -528,15 +844,24 @@ func main() {
 package main
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
+	"github.com/memoio/go-did/types"
 )
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -546,7 +871,23 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = controller.ChangePrice(big.NewInt(25))
+	mfileDID, _ := types.ParseMfileDID(did)
+
+	// 获取需要签名的消息
+	message, err := controller.GetChangePriceMessage(mfileDID, big.NewInt(25))
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 更改价格
+	err = controller.ChangePrice(mfileDID, big.NewInt(25), signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -561,13 +902,23 @@ func main() {
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
+	"github.com/memoio/go-did/types"
 )
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -577,7 +928,23 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = controller.ChangeKeywords([]string{"movie", "china"})
+	mfileDID, _ := types.ParseMfileDID(did)
+
+	// 获取需要签名的消息
+	message, err := controller.GetChangeKeywordsMessage(mfileDID, []string{"movie", "china"})
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 更改关键词
+	err = controller.ChangeKeywords(mfileDID, []string{"movie", "china"}, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -592,6 +959,8 @@ func main() {
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
 	"github.com/memoio/go-did/types"
@@ -599,7 +968,14 @@ import (
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -609,9 +985,24 @@ func main() {
 		panic(err.Error())
 	}
 
+	mfileDID, _ := types.ParseMfileDID(did)
 	memodid, _ := types.ParseMemoDID("did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96")
 
-	err = controller.AddRelationShip(types.Read, *memodid)
+	// 获取需要签名的消息
+	message, err := controller.GetAddRelationShipMessage(mfileDID, types.Read, *memodid)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 添加关系
+	err = controller.AddRelationShip(mfileDID, types.Read, *memodid, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -626,6 +1017,8 @@ func main() {
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
 	"github.com/memoio/go-did/types"
@@ -633,7 +1026,14 @@ import (
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -643,9 +1043,24 @@ func main() {
 		panic(err.Error())
 	}
 
+	mfileDID, _ := types.ParseMfileDID(did)
 	memodid, _ := types.ParseMemoDID("did:memo:d687daa192ffa26373395872191e8502cc41fbfbf27dc07d3da3a35de57c2d96")
 
-	err = controller.DeactivateRelationShip(types.Read, *memodid)
+	// 获取需要签名的消息
+	message, err := controller.GetDeactivateRelationShipMessage(mfileDID, types.Read, *memodid)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 停用关系
+	err = controller.DeactivateRelationShip(mfileDID, types.Read, *memodid, signature)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -660,13 +1075,23 @@ func main() {
 package main
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/memoio/go-did/mfile"
+	"github.com/memoio/go-did/types"
 )
 
 func main() {
 	did := "did:mfile:bafkreic7emp2v6ofwkpiiqmrbjq2m6sgyws4eyq5jbphqiywkqyxzbags4"
+	// 用于签名交易和支付gas费用
 	sk, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 用于签名用户操作，DID的所有者
+	userSK, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -676,7 +1101,23 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = controller.DeactivateDID()
+	mfileDID, _ := types.ParseMfileDID(did)
+
+	// 获取需要签名的消息
+	message, err := controller.GetDeactivateDIDMessage(mfileDID)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 使用EIP-191格式签名消息
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// 停用DID
+	err = controller.DeactivateDID(mfileDID, signature)
 	if err != nil {
 		panic(err.Error())
 	}

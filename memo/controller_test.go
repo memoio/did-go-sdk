@@ -112,88 +112,115 @@ func TestBasic(t *testing.T) {
 		return
 	}
 
+	// Used for signing transactions and paying gas fees for users.
 	privateKey := sks[0]
 
-	masterKey := pks[0]
-	pk1 := pks[1]
-	pk2 := pks[2]
-	// pk3 := pks[3]
+	// Used for signing user operations, the owner of the DID.
+	userSK := sks[1]
+	masterKey := pks[1]
+
+	pk1 := pks[2]
+	pk2 := pks[3]
 
 	d := &types.MemoDIDDocument{}
 
 	controller, err := NewMemoDIDController(privateKey, "dev")
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err.Error())
 	}
 
 	resolver, err := NewMemoDIDResolver("dev")
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err.Error())
 	}
 
-	did := controller.DID()
+	did, err := controller.CreateUnregisteredDID("EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey))
+	if err != nil {
+		t.Fatal(err.Error())
+	}
 	t.Log(did)
 
-	// register did(masterKey)
-	err = controller.RegisterDID()
+	// register did(userSK)
+	message, err := controller.GetRegisterMessage(did, "EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey))
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err.Error())
+	}
+
+	hash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err := crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	err = controller.RegisterDID(did, "EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey), signature)
+	if err != nil {
+		t.Fatal(err.Error())
 	}
 
 	document, err := resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err.Error())
 	}
 
 	verificationMethod, err := genVerificationMethod(did, 0, nil, "EcdsaSecp256k1VerificationKey2019", masterKey)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err.Error())
 	}
 
 	d.Context = DefaultContext
 	d.ID = *did
 	d.VerificationMethod = append(d.VerificationMethod, verificationMethod)
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect RegisterDID result")
-		return
+		t.Fatal("Unexpect RegisterDID result")
 	}
 
 	//
 	// add verification method(key-1)
-	err = controller.AddVerificationMethod("EcdsaSecp256k1VerificationKey2019", *did, pk1)
+	publicKey1Bytes, _ := hex.DecodeString(pk1)
+	message, err = controller.GetAddVerificationMethodMessage(did, "EcdsaSecp256k1VerificationKey2019", *did, publicKey1Bytes)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err.Error())
+	}
+
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	err = controller.AddVerificationMethod(did, "EcdsaSecp256k1VerificationKey2019", *did, publicKey1Bytes, signature)
+	if err != nil {
+		t.Fatal(err.Error())
 	}
 
 	document, err = resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err.Error())
 	}
 
 	verificationMethod, err = genVerificationMethod(did, 1, did, "EcdsaSecp256k1VerificationKey2019", pk1)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err.Error())
 	}
 	d.VerificationMethod = append(d.VerificationMethod, verificationMethod)
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect RegisterDID result")
-		return
+		t.Fatal("Unexpect RegisterDID result")
 	}
 
 	//
 	// add authentication(key-1)
-	err = controller.AddRelationShip(types.Authentication, document.VerificationMethod[0].ID, 0)
+	message, err = controller.GetAddRelationShipMessage(did, types.Authentication, document.VerificationMethod[0].ID, 0)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err.Error())
+	}
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	err = controller.AddRelationShip(did, types.Authentication, document.VerificationMethod[0].ID, 0, signature)
+	if err != nil {
+		t.Fatal(err.Error())
 	}
 
 	document, err = resolver.Resolve(did.String())
@@ -210,7 +237,21 @@ func TestBasic(t *testing.T) {
 
 	//
 	// add verification method(key-2)
-	err = controller.AddVerificationMethod("EcdsaSecp256k1VerificationKey2019", *did, pk2)
+	publicKey2Bytes, _ := hex.DecodeString(pk2)
+	message, err = controller.GetAddVerificationMethodMessage(did, "EcdsaSecp256k1VerificationKey2019", *did, publicKey2Bytes)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	err = controller.AddVerificationMethod(did, "EcdsaSecp256k1VerificationKey2019", *did, publicKey2Bytes, signature)
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -235,7 +276,20 @@ func TestBasic(t *testing.T) {
 
 	//
 	// add assertion method(masterKey)
-	err = controller.AddRelationShip(types.AssertionMethod, document.VerificationMethod[0].ID, 0)
+	message, err = controller.GetAddRelationShipMessage(did, types.AssertionMethod, document.VerificationMethod[0].ID, 0)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	err = controller.AddRelationShip(did, types.AssertionMethod, document.VerificationMethod[0].ID, 0, signature)
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -255,13 +309,41 @@ func TestBasic(t *testing.T) {
 
 	//
 	// add delegation(key-1, key-2)
-	err = controller.AddRelationShip(types.CapabilityDelegation, document.VerificationMethod[1].ID, 7*24*int64(time.Hour.Seconds()))
+	expireTime1 := time.Now().Unix() + 7*24*int64(time.Hour.Seconds())
+	message, err = controller.GetAddRelationShipMessage(did, types.CapabilityDelegation, document.VerificationMethod[1].ID, expireTime1)
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	err = controller.AddRelationShip(types.CapabilityDelegation, document.VerificationMethod[2].ID, int64(time.Minute.Seconds()))
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	err = controller.AddRelationShip(did, types.CapabilityDelegation, document.VerificationMethod[1].ID, expireTime1, signature)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	expireTime2 := time.Now().Unix() + int64(time.Minute.Seconds())
+	message, err = controller.GetAddRelationShipMessage(did, types.CapabilityDelegation, document.VerificationMethod[2].ID, expireTime2)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	err = controller.AddRelationShip(did, types.CapabilityDelegation, document.VerificationMethod[2].ID, expireTime2, signature)
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -282,19 +364,58 @@ func TestBasic(t *testing.T) {
 
 	//
 	// add recovery(masterKey, key-1, key-2)
-	err = controller.AddRelationShip(types.Recovery, document.VerificationMethod[0].ID, 0)
+	message, err = controller.GetAddRelationShipMessage(did, types.Recovery, document.VerificationMethod[0].ID, 0)
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	err = controller.AddRelationShip(types.Recovery, document.VerificationMethod[1].ID, 0)
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	err = controller.AddRelationShip(types.Recovery, document.VerificationMethod[2].ID, 0)
+	err = controller.AddRelationShip(did, types.Recovery, document.VerificationMethod[0].ID, 0, signature)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	message, err = controller.GetAddRelationShipMessage(did, types.Recovery, document.VerificationMethod[1].ID, 0)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	err = controller.AddRelationShip(did, types.Recovery, document.VerificationMethod[1].ID, 0, signature)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	message, err = controller.GetAddRelationShipMessage(did, types.Recovery, document.VerificationMethod[2].ID, 0)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	err = controller.AddRelationShip(did, types.Recovery, document.VerificationMethod[2].ID, 0, signature)
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -337,7 +458,20 @@ func TestBasic(t *testing.T) {
 	}
 
 	// deactivate recovery(key-1)
-	err = controller.DeactivateRelationShip(types.Recovery, document.VerificationMethod[1].ID)
+	message, err = controller.GetDeactivateRelationShipMessage(did, types.Recovery, document.VerificationMethod[1].ID)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	err = controller.DeactivateRelationShip(did, types.Recovery, document.VerificationMethod[1].ID, signature)
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -361,8 +495,21 @@ func TestBasic(t *testing.T) {
 	}
 
 	//
-	// dactivate verification method(key-2), also dactivate recovery(key-2).
-	err = controller.DeactivateVerificationMethod(document.VerificationMethod[2].ID)
+	// deactivate verification method(key-2), also deactivate recovery(key-2).
+	message, err = controller.GetDeactivateVerificationMethodMessage(document.VerificationMethod[2].ID)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	err = controller.DeactivateVerificationMethod(document.VerificationMethod[2].ID, signature)
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -388,8 +535,21 @@ func TestBasic(t *testing.T) {
 
 	remainUrl := d.Recovery[0]
 
-	// dactivate did
-	err = controller.DeactivateDID()
+	// deactivate did
+	message, err = controller.GetDeactivateDIDMessage(did)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	signature, err = crypto.Sign(hash, userSK)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	err = controller.DeactivateDID(did, signature)
 	if err != nil {
 		t.Error(err.Error())
 		return
@@ -407,35 +567,61 @@ func TestBasic(t *testing.T) {
 		return
 	}
 
-	// Trying to update dactivated did
-	err = controller.AddVerificationMethod("EcdsaSecp256k1VerificationKey2019", *did, pk1)
+	// Trying to update deactivated did
+	publicKey1Bytes, _ = hex.DecodeString(pk1)
+	message, err = controller.GetAddVerificationMethodMessage(did, "EcdsaSecp256k1VerificationKey2019", *did, publicKey1Bytes)
 	if err == nil {
-		t.Error("There should report an error when trying to update dactivated did")
-		return
+		hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+		signature, _ = crypto.Sign(hash, userSK)
+		err = controller.AddVerificationMethod(did, "EcdsaSecp256k1VerificationKey2019", *did, publicKey1Bytes, signature)
+		if err == nil {
+			t.Error("There should report an error when trying to update deactivated did")
+			return
+		}
 	}
 
-	err = controller.AddRelationShip(types.Authentication, remainUrl, 0)
+	message, err = controller.GetAddRelationShipMessage(did, types.Authentication, remainUrl, 0)
 	if err == nil {
-		t.Error("There should report an error when trying to update dactivated did")
-		return
+		hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+		signature, _ = crypto.Sign(hash, userSK)
+		err = controller.AddRelationShip(did, types.Authentication, remainUrl, 0, signature)
+		if err == nil {
+			t.Error("There should report an error when trying to update deactivated did")
+			return
+		}
 	}
 
-	err = controller.AddRelationShip(types.AssertionMethod, remainUrl, 0)
+	message, err = controller.GetAddRelationShipMessage(did, types.AssertionMethod, remainUrl, 0)
 	if err == nil {
-		t.Error("There should report an error when trying to update dactivated did")
-		return
+		hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+		signature, _ = crypto.Sign(hash, userSK)
+		err = controller.AddRelationShip(did, types.AssertionMethod, remainUrl, 0, signature)
+		if err == nil {
+			t.Error("There should report an error when trying to update deactivated did")
+			return
+		}
 	}
 
-	err = controller.AddRelationShip(types.CapabilityDelegation, remainUrl, 0)
+	message, err = controller.GetAddRelationShipMessage(did, types.CapabilityDelegation, remainUrl, 0)
 	if err == nil {
-		t.Error("There should report an error when trying to update dactivated did")
-		return
+		hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+		signature, _ = crypto.Sign(hash, userSK)
+		err = controller.AddRelationShip(did, types.CapabilityDelegation, remainUrl, 0, signature)
+		if err == nil {
+			t.Error("There should report an error when trying to update deactivated did")
+			return
+		}
 	}
 
-	err = controller.AddRelationShip(types.Recovery, remainUrl, 0)
+	message, err = controller.GetAddRelationShipMessage(did, types.Recovery, remainUrl, 0)
 	if err == nil {
-		t.Error("There should report an error when trying to update dactivated did")
-		return
+		hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+		signature, _ = crypto.Sign(hash, userSK)
+		err = controller.AddRelationShip(did, types.Recovery, remainUrl, 0, signature)
+		if err == nil {
+			t.Error("There should report an error when trying to update deactivated did")
+			return
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ package mfile
 import (
 	"context"
 	"crypto/ecdsa"
+	"encoding/binary"
 	"math/big"
 	"time"
 
@@ -80,7 +81,44 @@ func (c *MfileDIDController) DID() *types.MfileDID {
 	return c.did
 }
 
-func (c *MfileDIDController) RegisterDID(encode string, ftype uint8, price *big.Int, keywords []string, controller types.MemoDID) error {
+// GetRegisterDIDMessage get the message to be signed by the user
+// Use EIP-191 to sign the message
+// See more details: https://eips.ethereum.org/EIPS/eip-191
+func (c *MfileDIDController) GetRegisterDIDMessage(did *types.MfileDID, encode string, ftype uint8, price *big.Int, keywords []string, controller types.MemoDID) (string, error) {
+	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	proxyIns, err := proxy.NewProxy(c.proxyAddr, client)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	if err != nil {
+		return "", err
+	}
+
+	var nonceBuf = make([]byte, 8)
+	binary.BigEndian.PutUint64(nonceBuf, nonce)
+	var ftypeBuf = make([]byte, 8)
+	binary.BigEndian.PutUint64(ftypeBuf, uint64(ftype))
+	var priceBuf = make([]byte, 32)
+	price.FillBytes(priceBuf)
+
+	keywordsStr := ""
+	for _, kw := range keywords {
+		keywordsStr += kw
+	}
+
+	message := string("registerMfileDID") + did.Identifier + encode + string(ftypeBuf) + string(priceBuf) + keywordsStr + controller.Identifier + string(nonceBuf)
+
+	return message, nil
+}
+
+func (c *MfileDIDController) RegisterDID(did *types.MfileDID, encode string, ftype uint8, price *big.Int, keywords []string, controller types.MemoDID, signature []byte) error {
 	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
 	if err != nil {
 		return err
@@ -92,7 +130,7 @@ func (c *MfileDIDController) RegisterDID(encode string, ftype uint8, price *big.
 		return err
 	}
 
-	tx, err := proxyIns.RegisterMfileDid(c.didTransactor, c.did.Identifier, encode, ftype, controller.Identifier, price, keywords)
+	tx, err := proxyIns.RegisterMfileDid(c.didTransactor, did.Identifier, encode, ftype, controller.Identifier, price, keywords, signature)
 	if err != nil {
 		return err
 	}
@@ -100,7 +138,35 @@ func (c *MfileDIDController) RegisterDID(encode string, ftype uint8, price *big.
 	return CheckTx(c.endpoint, tx.Hash(), "RegisterDID")
 }
 
-func (c *MfileDIDController) ChangeController(controller types.MemoDID) error {
+// GetChangeControllerMessage get the message to be signed by the user
+// Use EIP-191 to sign the message
+// See more details: https://eips.ethereum.org/EIPS/eip-191
+func (c *MfileDIDController) GetChangeControllerMessage(did *types.MfileDID, controller types.MemoDID) (string, error) {
+	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	proxyIns, err := proxy.NewProxy(c.proxyAddr, client)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	if err != nil {
+		return "", err
+	}
+
+	var nonceBuf = make([]byte, 8)
+	binary.BigEndian.PutUint64(nonceBuf, nonce)
+
+	message := string("changeController") + did.Identifier + controller.Identifier + string(nonceBuf)
+
+	return message, nil
+}
+
+func (c *MfileDIDController) ChangeController(did *types.MfileDID, controller types.MemoDID, signature []byte) error {
 	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
 	if err != nil {
 		return err
@@ -112,7 +178,7 @@ func (c *MfileDIDController) ChangeController(controller types.MemoDID) error {
 		return err
 	}
 
-	tx, err := proxyIns.ChangeController(c.didTransactor, c.did.Identifier, controller.Identifier)
+	tx, err := proxyIns.ChangeController(c.didTransactor, did.Identifier, controller.Identifier, signature)
 	if err != nil {
 		return err
 	}
@@ -120,7 +186,37 @@ func (c *MfileDIDController) ChangeController(controller types.MemoDID) error {
 	return CheckTx(c.endpoint, tx.Hash(), "ChangeController")
 }
 
-func (c *MfileDIDController) ChangeFileType(ftype uint8) error {
+// GetChangeFileTypeMessage get the message to be signed by the user
+// Use EIP-191 to sign the message
+// See more details: https://eips.ethereum.org/EIPS/eip-191
+func (c *MfileDIDController) GetChangeFileTypeMessage(did *types.MfileDID, ftype uint8) (string, error) {
+	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	proxyIns, err := proxy.NewProxy(c.proxyAddr, client)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	if err != nil {
+		return "", err
+	}
+
+	var nonceBuf = make([]byte, 8)
+	binary.BigEndian.PutUint64(nonceBuf, nonce)
+	var ftypeBuf = make([]byte, 8)
+	binary.BigEndian.PutUint64(ftypeBuf, uint64(ftype))
+
+	message := string("changeFileType") + did.Identifier + string(ftypeBuf) + string(nonceBuf)
+
+	return message, nil
+}
+
+func (c *MfileDIDController) ChangeFileType(did *types.MfileDID, ftype uint8, signature []byte) error {
 	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
 	if err != nil {
 		return err
@@ -132,7 +228,7 @@ func (c *MfileDIDController) ChangeFileType(ftype uint8) error {
 		return err
 	}
 
-	tx, err := proxyIns.ChangeFtype(c.didTransactor, c.did.Identifier, ftype)
+	tx, err := proxyIns.ChangeFtype(c.didTransactor, did.Identifier, ftype, signature)
 	if err != nil {
 		return err
 	}
@@ -140,7 +236,37 @@ func (c *MfileDIDController) ChangeFileType(ftype uint8) error {
 	return CheckTx(c.endpoint, tx.Hash(), "ChangeFileType")
 }
 
-func (c *MfileDIDController) ChangePrice(price *big.Int) error {
+// GetChangePriceMessage get the message to be signed by the user
+// Use EIP-191 to sign the message
+// See more details: https://eips.ethereum.org/EIPS/eip-191
+func (c *MfileDIDController) GetChangePriceMessage(did *types.MfileDID, price *big.Int) (string, error) {
+	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	proxyIns, err := proxy.NewProxy(c.proxyAddr, client)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	if err != nil {
+		return "", err
+	}
+
+	var nonceBuf = make([]byte, 8)
+	binary.BigEndian.PutUint64(nonceBuf, nonce)
+	var priceBuf = make([]byte, 32)
+	price.FillBytes(priceBuf)
+
+	message := string("changePrice") + did.Identifier + string(priceBuf) + string(nonceBuf)
+
+	return message, nil
+}
+
+func (c *MfileDIDController) ChangePrice(did *types.MfileDID, price *big.Int, signature []byte) error {
 	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
 	if err != nil {
 		return err
@@ -152,7 +278,7 @@ func (c *MfileDIDController) ChangePrice(price *big.Int) error {
 		return err
 	}
 
-	tx, err := proxyIns.ChangePrice(c.didTransactor, c.did.Identifier, price)
+	tx, err := proxyIns.ChangePrice(c.didTransactor, did.Identifier, price, signature)
 	if err != nil {
 		return err
 	}
@@ -160,7 +286,40 @@ func (c *MfileDIDController) ChangePrice(price *big.Int) error {
 	return CheckTx(c.endpoint, tx.Hash(), "ChangePrice")
 }
 
-func (c *MfileDIDController) ChangeKeywords(keywords []string) error {
+// GetChangeKeywordsMessage get the message to be signed by the user
+// Use EIP-191 to sign the message
+// See more details: https://eips.ethereum.org/EIPS/eip-191
+func (c *MfileDIDController) GetChangeKeywordsMessage(did *types.MfileDID, keywords []string) (string, error) {
+	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	proxyIns, err := proxy.NewProxy(c.proxyAddr, client)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	if err != nil {
+		return "", err
+	}
+
+	var nonceBuf = make([]byte, 8)
+	binary.BigEndian.PutUint64(nonceBuf, nonce)
+
+	keywordsStr := ""
+	for _, kw := range keywords {
+		keywordsStr += kw
+	}
+
+	message := string("changeKeywords") + did.Identifier + keywordsStr + string(nonceBuf)
+
+	return message, nil
+}
+
+func (c *MfileDIDController) ChangeKeywords(did *types.MfileDID, keywords []string, signature []byte) error {
 	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
 	if err != nil {
 		return err
@@ -172,7 +331,7 @@ func (c *MfileDIDController) ChangeKeywords(keywords []string) error {
 		return err
 	}
 
-	tx, err := proxyIns.ChangeKeywords(c.didTransactor, c.did.Identifier, keywords)
+	tx, err := proxyIns.ChangeKeywords(c.didTransactor, did.Identifier, keywords, signature)
 	if err != nil {
 		return err
 	}
@@ -180,7 +339,41 @@ func (c *MfileDIDController) ChangeKeywords(keywords []string) error {
 	return CheckTx(c.endpoint, tx.Hash(), "ChangeKeywords")
 }
 
-func (c *MfileDIDController) AddRelationShip(relationType int, did types.MemoDID) error {
+// GetAddRelationShipMessage get the message to be signed by the user
+// Use EIP-191 to sign the message
+// See more details: https://eips.ethereum.org/EIPS/eip-191
+func (c *MfileDIDController) GetAddRelationShipMessage(did *types.MfileDID, relationType int, memoDID types.MemoDID) (string, error) {
+	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	proxyIns, err := proxy.NewProxy(c.proxyAddr, client)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	if err != nil {
+		return "", err
+	}
+
+	var nonceBuf = make([]byte, 8)
+	binary.BigEndian.PutUint64(nonceBuf, nonce)
+
+	var message string
+	switch relationType {
+	case types.Read:
+		message = string("grantRead") + did.Identifier + memoDID.Identifier + string(nonceBuf)
+	default:
+		return "", xerrors.Errorf("unsupported relation type")
+	}
+
+	return message, nil
+}
+
+func (c *MfileDIDController) AddRelationShip(did *types.MfileDID, relationType int, memoDID types.MemoDID, signature []byte) error {
 	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
 	if err != nil {
 		return err
@@ -195,7 +388,7 @@ func (c *MfileDIDController) AddRelationShip(relationType int, did types.MemoDID
 	var tx *etypes.Transaction
 	switch relationType {
 	case types.Read:
-		tx, err = proxyIns.GrantRead(c.didTransactor, c.did.Identifier, did.Identifier)
+		tx, err = proxyIns.GrantRead(c.didTransactor, did.Identifier, memoDID.Identifier, signature)
 	default:
 		return xerrors.Errorf("unsupported relation ships")
 	}
@@ -206,7 +399,41 @@ func (c *MfileDIDController) AddRelationShip(relationType int, did types.MemoDID
 	return CheckTx(c.endpoint, tx.Hash(), "AddRelationShip")
 }
 
-func (c *MfileDIDController) DeactivateRelationShip(relationType int, didUrl types.MemoDID) error {
+// GetDeactivateRelationShipMessage get the message to be signed by the user
+// Use EIP-191 to sign the message
+// See more details: https://eips.ethereum.org/EIPS/eip-191
+func (c *MfileDIDController) GetDeactivateRelationShipMessage(did *types.MfileDID, relationType int, memoDID types.MemoDID) (string, error) {
+	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	proxyIns, err := proxy.NewProxy(c.proxyAddr, client)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	if err != nil {
+		return "", err
+	}
+
+	var nonceBuf = make([]byte, 8)
+	binary.BigEndian.PutUint64(nonceBuf, nonce)
+
+	var message string
+	switch relationType {
+	case types.Read:
+		message = string("deactivateRead") + did.Identifier + memoDID.Identifier + string(nonceBuf)
+	default:
+		return "", xerrors.Errorf("unsupported relation type")
+	}
+
+	return message, nil
+}
+
+func (c *MfileDIDController) DeactivateRelationShip(did *types.MfileDID, relationType int, memoDID types.MemoDID, signature []byte) error {
 	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
 	if err != nil {
 		return err
@@ -221,7 +448,7 @@ func (c *MfileDIDController) DeactivateRelationShip(relationType int, didUrl typ
 	var tx *etypes.Transaction
 	switch relationType {
 	case types.Read:
-		tx, err = proxyIns.DeactivateRead(c.didTransactor, c.did.Identifier, didUrl.Identifier)
+		tx, err = proxyIns.DeactivateRead(c.didTransactor, did.Identifier, memoDID.Identifier, signature)
 	default:
 		return xerrors.Errorf("unsupported relation ships")
 	}
@@ -229,10 +456,38 @@ func (c *MfileDIDController) DeactivateRelationShip(relationType int, didUrl typ
 		return err
 	}
 
-	return CheckTx(c.endpoint, tx.Hash(), "DactivateRelationShip")
+	return CheckTx(c.endpoint, tx.Hash(), "DeactivateRelationShip")
 }
 
-func (c *MfileDIDController) DeactivateDID() error {
+// GetDeactivateDIDMessage get the message to be signed by the user
+// Use EIP-191 to sign the message
+// See more details: https://eips.ethereum.org/EIPS/eip-191
+func (c *MfileDIDController) GetDeactivateDIDMessage(did *types.MfileDID) (string, error) {
+	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	proxyIns, err := proxy.NewProxy(c.proxyAddr, client)
+	if err != nil {
+		return "", err
+	}
+
+	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	if err != nil {
+		return "", err
+	}
+
+	var nonceBuf = make([]byte, 8)
+	binary.BigEndian.PutUint64(nonceBuf, nonce)
+
+	message := string("deactivateMfileDID") + did.Identifier + string(nonceBuf)
+
+	return message, nil
+}
+
+func (c *MfileDIDController) DeactivateDID(did *types.MfileDID, signature []byte) error {
 	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
 	if err != nil {
 		return err
@@ -244,7 +499,7 @@ func (c *MfileDIDController) DeactivateDID() error {
 		return err
 	}
 
-	tx, err := proxyIns.DeactivateMfileDid(c.didTransactor, c.did.Identifier, true)
+	tx, err := proxyIns.DeactivateMfileDid(c.didTransactor, did.Identifier, true, signature)
 	if err != nil {
 		return err
 	}

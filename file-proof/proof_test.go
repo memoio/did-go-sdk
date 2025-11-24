@@ -2,6 +2,7 @@ package proof
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"math/big"
@@ -63,10 +64,10 @@ func init() {
 		addrSlice[i] = addr
 	}
 	addrs = ContractAddress{
-		PledgeAddr: addrSlice[0],
-		ProofAddr: addrSlice[1],
+		PledgeAddr:       addrSlice[0],
+		ProofAddr:        addrSlice[1],
 		ProofControlAddr: addrSlice[2],
-		ProofProxyAddr: addrSlice[3],
+		ProofProxyAddr:   addrSlice[3],
 	}
 }
 

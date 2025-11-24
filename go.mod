@@ -1,11 +1,15 @@
 module github.com/memoio/go-did
 
-go 1.20
+go 1.22
+
+toolchain go1.22.3
 
 replace (
 	github.com/memoio/contractsv2 => ../memov2-contractsv2
 	github.com/memoio/did-solidity => ../did-solidity
 )
+
+exclude github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1
 
 require (
 	github.com/cockroachdb/errors v1.9.1
@@ -53,9 +57,9 @@ require (
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/tklauser/numcpus v0.2.2 // indirect
-	golang.org/x/crypto v0.10.0 // indirect
-	golang.org/x/sys v0.9.0 // indirect
-	golang.org/x/text v0.10.0 // indirect
+	golang.org/x/crypto v0.23.0 // indirect
+	golang.org/x/sys v0.21.0 // indirect
+	golang.org/x/text v0.15.0 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
