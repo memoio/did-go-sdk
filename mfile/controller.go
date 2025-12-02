@@ -24,7 +24,6 @@ var (
 )
 
 type MfileDIDController struct {
-	did           *types.MfileDID
 	endpoint      string
 	privateKey    *ecdsa.PrivateKey
 	didTransactor *bind.TransactOpts
@@ -33,7 +32,7 @@ type MfileDIDController struct {
 
 var _ MfileStore = &MfileDIDController{}
 
-func NewMfileDIDController(privateKey *ecdsa.PrivateKey, chain, didString string) (*MfileDIDController, error) {
+func NewMfileDIDController(privateKey *ecdsa.PrivateKey, chain string) (*MfileDIDController, error) {
 	instanceAddr, endpoint := com.GetInsEndPointByChain(chain)
 
 	client, err := ethclient.DialContext(context.TODO(), endpoint)
@@ -63,22 +62,15 @@ func NewMfileDIDController(privateKey *ecdsa.PrivateKey, chain, didString string
 	if err != nil {
 		return nil, err
 	}
-	auth.Value = big.NewInt(0)     // in wei
-	auth.GasLimit = uint64(300000) // in units
-	auth.GasPrice = big.NewInt(1000)
+	auth.Value = big.NewInt(0) // in wei
+	auth.GasPrice = big.NewInt(2000)
 
-	did, err := types.ParseMfileDID(didString)
 	return &MfileDIDController{
-		did:           did,
 		endpoint:      endpoint,
 		privateKey:    privateKey,
 		didTransactor: auth,
 		proxyAddr:     proxyAddr,
 	}, err
-}
-
-func (c *MfileDIDController) DID() *types.MfileDID {
-	return c.did
 }
 
 // GetRegisterDIDMessage get the message to be signed by the user
@@ -103,8 +95,8 @@ func (c *MfileDIDController) GetRegisterDIDMessage(did *types.MfileDID, encode s
 
 	var nonceBuf = make([]byte, 8)
 	binary.BigEndian.PutUint64(nonceBuf, nonce)
-	var ftypeBuf = make([]byte, 8)
-	binary.BigEndian.PutUint64(ftypeBuf, uint64(ftype))
+	var ftypeBuf = make([]byte, 1)
+	ftypeBuf[0] = ftype
 	var priceBuf = make([]byte, 32)
 	price.FillBytes(priceBuf)
 
@@ -113,7 +105,7 @@ func (c *MfileDIDController) GetRegisterDIDMessage(did *types.MfileDID, encode s
 		keywordsStr += kw
 	}
 
-	message := string("registerMfileDID") + did.Identifier + encode + string(ftypeBuf) + string(priceBuf) + keywordsStr + controller.Identifier + string(nonceBuf)
+	message := string("registerMfileDid") + did.Identifier + encode + string(ftypeBuf) + controller.Identifier + string(priceBuf) + string(nonceBuf) + keywordsStr
 
 	return message, nil
 }
@@ -153,7 +145,7 @@ func (c *MfileDIDController) GetChangeControllerMessage(did *types.MfileDID, con
 		return "", err
 	}
 
-	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	nonce, err := proxyIns.GetFileDidNonceByMfile(&bind.CallOpts{}, did.Identifier)
 	if err != nil {
 		return "", err
 	}
@@ -201,7 +193,7 @@ func (c *MfileDIDController) GetChangeFileTypeMessage(did *types.MfileDID, ftype
 		return "", err
 	}
 
-	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	nonce, err := proxyIns.GetFileDidNonceByMfile(&bind.CallOpts{}, did.Identifier)
 	if err != nil {
 		return "", err
 	}
@@ -251,7 +243,7 @@ func (c *MfileDIDController) GetChangePriceMessage(did *types.MfileDID, price *b
 		return "", err
 	}
 
-	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	nonce, err := proxyIns.GetFileDidNonceByMfile(&bind.CallOpts{}, did.Identifier)
 	if err != nil {
 		return "", err
 	}
@@ -301,7 +293,7 @@ func (c *MfileDIDController) GetChangeKeywordsMessage(did *types.MfileDID, keywo
 		return "", err
 	}
 
-	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	nonce, err := proxyIns.GetFileDidNonceByMfile(&bind.CallOpts{}, did.Identifier)
 	if err != nil {
 		return "", err
 	}
@@ -354,7 +346,7 @@ func (c *MfileDIDController) GetAddRelationShipMessage(did *types.MfileDID, rela
 		return "", err
 	}
 
-	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	nonce, err := proxyIns.GetFileDidNonceByMfile(&bind.CallOpts{}, did.Identifier)
 	if err != nil {
 		return "", err
 	}
@@ -414,7 +406,7 @@ func (c *MfileDIDController) GetDeactivateRelationShipMessage(did *types.MfileDI
 		return "", err
 	}
 
-	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	nonce, err := proxyIns.GetFileDidNonceByMfile(&bind.CallOpts{}, did.Identifier)
 	if err != nil {
 		return "", err
 	}
@@ -474,7 +466,7 @@ func (c *MfileDIDController) GetDeactivateDIDMessage(did *types.MfileDID) (strin
 		return "", err
 	}
 
-	nonce, err := proxyIns.GetNonce(&bind.CallOpts{}, did.Identifier)
+	nonce, err := proxyIns.GetFileDidNonceByMfile(&bind.CallOpts{}, did.Identifier)
 	if err != nil {
 		return "", err
 	}

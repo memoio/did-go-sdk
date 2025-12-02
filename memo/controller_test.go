@@ -170,8 +170,13 @@ func TestBasic(t *testing.T) {
 	d.Context = DefaultContext
 	d.ID = *did
 	d.VerificationMethod = append(d.VerificationMethod, verificationMethod)
+	d.Authentication = append(d.Authentication, verificationMethod.ID)
 	if !reflect.DeepEqual(document, d) {
-		t.Fatal("Unexpect RegisterDID result")
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	//
@@ -204,35 +209,41 @@ func TestBasic(t *testing.T) {
 	}
 	d.VerificationMethod = append(d.VerificationMethod, verificationMethod)
 	if !reflect.DeepEqual(document, d) {
-		t.Fatal("Unexpect RegisterDID result")
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	//
 	// add authentication(key-1)
-	message, err = controller.GetAddRelationShipMessage(did, types.Authentication, document.VerificationMethod[0].ID, 0)
+	message, err = controller.GetAddRelationShipMessage(did, types.Authentication, document.VerificationMethod[1].ID, 0)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatal(err)
 	}
-	err = controller.AddRelationShip(did, types.Authentication, document.VerificationMethod[0].ID, 0, signature)
+	err = controller.AddRelationShip(did, types.Authentication, document.VerificationMethod[1].ID, 0, signature)
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatal(err)
 	}
 
 	document, err = resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
-	d.Authentication = append(d.Authentication, d.VerificationMethod[0].ID)
+	d.Authentication = append(d.Authentication, d.VerificationMethod[1].ID)
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect RegisterDID result")
-		return
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	//
@@ -240,71 +251,68 @@ func TestBasic(t *testing.T) {
 	publicKey2Bytes, _ := hex.DecodeString(pk2)
 	message, err = controller.GetAddVerificationMethodMessage(did, "EcdsaSecp256k1VerificationKey2019", *did, publicKey2Bytes)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	err = controller.AddVerificationMethod(did, "EcdsaSecp256k1VerificationKey2019", *did, publicKey2Bytes, signature)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	document, err = resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	verificationMethod, err = genVerificationMethod(did, 2, did, "EcdsaSecp256k1VerificationKey2019", pk2)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 	d.VerificationMethod = append(d.VerificationMethod, verificationMethod)
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect result")
-		return
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	//
 	// add assertion method(masterKey)
 	message, err = controller.GetAddRelationShipMessage(did, types.AssertionMethod, document.VerificationMethod[0].ID, 0)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	err = controller.AddRelationShip(did, types.AssertionMethod, document.VerificationMethod[0].ID, 0, signature)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	document, err = resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	d.AssertionMethod = append(d.AssertionMethod, d.VerificationMethod[0].ID)
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect result")
-		return
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	//
@@ -312,119 +320,105 @@ func TestBasic(t *testing.T) {
 	expireTime1 := time.Now().Unix() + 7*24*int64(time.Hour.Seconds())
 	message, err = controller.GetAddRelationShipMessage(did, types.CapabilityDelegation, document.VerificationMethod[1].ID, expireTime1)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	err = controller.AddRelationShip(did, types.CapabilityDelegation, document.VerificationMethod[1].ID, expireTime1, signature)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	expireTime2 := time.Now().Unix() + int64(time.Minute.Seconds())
 	message, err = controller.GetAddRelationShipMessage(did, types.CapabilityDelegation, document.VerificationMethod[2].ID, expireTime2)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	err = controller.AddRelationShip(did, types.CapabilityDelegation, document.VerificationMethod[2].ID, expireTime2, signature)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	document, err = resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	d.CapabilityDelegation = append(d.CapabilityDelegation, d.VerificationMethod[1].ID)
 	d.CapabilityDelegation = append(d.CapabilityDelegation, d.VerificationMethod[2].ID)
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect result")
-		return
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	//
 	// add recovery(masterKey, key-1, key-2)
 	message, err = controller.GetAddRelationShipMessage(did, types.Recovery, document.VerificationMethod[0].ID, 0)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	err = controller.AddRelationShip(did, types.Recovery, document.VerificationMethod[0].ID, 0, signature)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	message, err = controller.GetAddRelationShipMessage(did, types.Recovery, document.VerificationMethod[1].ID, 0)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	err = controller.AddRelationShip(did, types.Recovery, document.VerificationMethod[1].ID, 0, signature)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	message, err = controller.GetAddRelationShipMessage(did, types.Recovery, document.VerificationMethod[2].ID, 0)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	err = controller.AddRelationShip(did, types.Recovery, document.VerificationMethod[2].ID, 0, signature)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	document, err = resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	d.Recovery = append(d.Recovery, d.VerificationMethod[0].ID)
@@ -432,8 +426,11 @@ func TestBasic(t *testing.T) {
 	d.Recovery = append(d.Recovery, d.VerificationMethod[2].ID)
 
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect result")
-		return
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	//
@@ -442,8 +439,7 @@ func TestBasic(t *testing.T) {
 
 	document, err = resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	for i, delegation := range d.CapabilityDelegation {
@@ -453,22 +449,23 @@ func TestBasic(t *testing.T) {
 		}
 	}
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect result")
-		return
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	// deactivate recovery(key-1)
 	message, err = controller.GetDeactivateRelationShipMessage(did, types.Recovery, document.VerificationMethod[1].ID)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	err = controller.DeactivateRelationShip(did, types.Recovery, document.VerificationMethod[1].ID, signature)
@@ -479,8 +476,7 @@ func TestBasic(t *testing.T) {
 
 	document, err = resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	for i, recovery := range d.Recovery {
@@ -490,42 +486,44 @@ func TestBasic(t *testing.T) {
 		}
 	}
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect result")
-		return
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	//
 	// deactivate verification method(key-2), also deactivate recovery(key-2).
 	message, err = controller.GetDeactivateVerificationMethodMessage(document.VerificationMethod[2].ID)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	err = controller.DeactivateVerificationMethod(document.VerificationMethod[2].ID, signature)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	document, err = resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	d.VerificationMethod = d.VerificationMethod[:2]
 	d.Recovery = d.Recovery[:1]
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect result")
-		return
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	data, _ := json.MarshalIndent(document, " ", "\t")
@@ -538,33 +536,32 @@ func TestBasic(t *testing.T) {
 	// deactivate did
 	message, err = controller.GetDeactivateDIDMessage(did)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
 	signature, err = crypto.Sign(hash, userSK)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	err = controller.DeactivateDID(did, signature)
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	document, err = resolver.Resolve(did.String())
 	if err != nil {
-		t.Error(err.Error())
-		return
+		t.Fatal(err)
 	}
 
 	d = &types.MemoDIDDocument{}
 	if !reflect.DeepEqual(document, d) {
-		t.Error("Unexpect result")
-		return
+		jsonData, _ := json.MarshalIndent(document, "", "\t")
+		t.Log(string(jsonData))
+		jsonData, _ = json.MarshalIndent(d, "", "\t")
+		t.Log(string(jsonData))
+		t.Fatal("Unexpect result")
 	}
 
 	// Trying to update deactivated did

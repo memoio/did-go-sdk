@@ -164,7 +164,7 @@ func (c *MemoDIDController) GetAddVerificationMethodMessage(did *types.MemoDID, 
 	var nonceBuf = make([]byte, 8)
 	binary.BigEndian.PutUint64(nonceBuf, nonce)
 
-	message := string("addVerificationMethod") + did.Identifier + vtype + controller.Identifier + string(publicKeyBytes) + string(nonceBuf)
+	message := string("addVerification") + vtype + controller.Identifier + string(publicKeyBytes) + string(nonceBuf)
 
 	return message, nil
 }
@@ -175,6 +175,7 @@ func (c *MemoDIDController) AddVerificationMethod(did *types.MemoDID, vtype stri
 		Controller:  controller.Identifier,
 		PubKeyData:  publicKeyBytes,
 		Deactivated: false,
+		PubKeyPoint: [2]*big.Int{big.NewInt(0), big.NewInt(0)},
 	}
 
 	client, err := ethclient.DialContext(context.TODO(), c.endpoint)
@@ -272,10 +273,12 @@ func (c *MemoDIDController) GetDeactivateVerificationMethodMessage(didUrl types.
 
 	var nonceBuf = make([]byte, 8)
 	binary.BigEndian.PutUint64(nonceBuf, nonce)
-	var indexBuf = make([]byte, 8)
-	binary.BigEndian.PutUint64(indexBuf, uint64(didUrl.GetMethodIndex()))
+	var indexBuf = make([]byte, 32)
+	binary.BigEndian.PutUint64(indexBuf[24:], uint64(didUrl.GetMethodIndex()))
+	var deactivateBuf = make([]byte, 1)
+	deactivateBuf[0] = 1
 
-	message := string("deactivateVerificationMethod") + didUrl.Identifier + string(indexBuf) + string(nonceBuf)
+	message := string("deactivateVerification") + didUrl.Identifier + string(indexBuf) + string(deactivateBuf) + string(nonceBuf)
 
 	return message, nil
 }
@@ -322,8 +325,8 @@ func (c *MemoDIDController) GetAddRelationShipMessage(did *types.MemoDID, relati
 
 	var nonceBuf = make([]byte, 8)
 	binary.BigEndian.PutUint64(nonceBuf, nonce)
-	var expireBuf = make([]byte, 8)
-	binary.BigEndian.PutUint64(expireBuf, uint64(expireTime))
+	var expireBuf = make([]byte, 32)
+	binary.BigEndian.PutUint64(expireBuf[24:], uint64(expireTime))
 
 	var message string
 	switch relationType {
@@ -361,7 +364,7 @@ func (c *MemoDIDController) AddRelationShip(did *types.MemoDID, relationType int
 	case types.AssertionMethod:
 		tx, err = proxyIns.AddAssertion(c.didTransactor, did.Identifier, didUrl.String(), signature)
 	case types.CapabilityDelegation:
-		tx, err = proxyIns.AddDelegation(c.didTransactor, did.Identifier, didUrl.String(), big.NewInt(expireTime+time.Now().Unix()), signature)
+		tx, err = proxyIns.AddDelegation(c.didTransactor, did.Identifier, didUrl.String(), big.NewInt(expireTime), signature)
 	case types.Recovery:
 		tx, err = proxyIns.AddRecovery(c.didTransactor, did.Identifier, didUrl.String(), signature)
 	default:
@@ -400,13 +403,13 @@ func (c *MemoDIDController) GetDeactivateRelationShipMessage(did *types.MemoDID,
 	var message string
 	switch relationType {
 	case types.Authentication:
-		message = string("deactivateAuthentication") + did.Identifier + didUrl.String() + string(nonceBuf)
+		message = string("removeAuthentication") + did.Identifier + didUrl.String() + string(nonceBuf)
 	case types.AssertionMethod:
-		message = string("deactivateAssertion") + did.Identifier + didUrl.String() + string(nonceBuf)
+		message = string("removeAssertion") + did.Identifier + didUrl.String() + string(nonceBuf)
 	case types.CapabilityDelegation:
-		message = string("deactivateDelegation") + did.Identifier + didUrl.String() + string(nonceBuf)
+		message = string("removeDelegation") + did.Identifier + didUrl.String() + string(nonceBuf)
 	case types.Recovery:
-		message = string("deactivateRecovery") + did.Identifier + didUrl.String() + string(nonceBuf)
+		message = string("removeRecovery") + did.Identifier + didUrl.String() + string(nonceBuf)
 	default:
 		return "", xerrors.Errorf("unsupported relation type")
 	}
@@ -468,8 +471,10 @@ func (c *MemoDIDController) GetDeactivateDIDMessage(did *types.MemoDID) (string,
 
 	var nonceBuf = make([]byte, 8)
 	binary.BigEndian.PutUint64(nonceBuf, nonce)
+	var deactivateBuf = make([]byte, 1)
+	deactivateBuf[0] = 1
 
-	message := string("deactivateDID") + did.Identifier + string(nonceBuf)
+	message := string("deactivateDID") + did.Identifier + string(deactivateBuf) + string(nonceBuf)
 
 	return message, nil
 }

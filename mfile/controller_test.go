@@ -100,11 +100,14 @@ func TestBasic(t *testing.T) {
 	userSK := sks[1]
 
 	cid := genCid()
-	mfileDIDString := "did:mfile:" + cid.String()
+	mfileDID, err := types.ParseMfileDID("did:mfile:" + cid.String())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	resolver, _ := NewMfileDIDResolver("dev")
 
-	mfilecontroller, err := NewMfileDIDController(masterKey1, "dev", mfileDIDString)
+	mfilecontroller, err := NewMfileDIDController(masterKey1, "dev")
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -135,22 +138,6 @@ func TestBasic(t *testing.T) {
 	err = memocontroller.RegisterDID(memoDID, "EcdsaSecp256k1VerificationKey2019", crypto.CompressPubkey(&userSK.PublicKey), signature)
 	if err != nil {
 		t.Fatal(err.Error())
-	}
-
-	// Try to register mfile DID before controller is registered (should fail)
-	mfileDID, err := types.ParseMfileDID(mfileDIDString)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-
-	message, err = mfilecontroller.GetRegisterDIDMessage(mfileDID, "cid", 0, big.NewInt(10), []string{"test"}, *memoDID)
-	if err == nil {
-		hash = crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
-		signature, _ = crypto.Sign(hash, userSK)
-		err = mfilecontroller.RegisterDID(mfileDID, "cid", 0, big.NewInt(10), []string{"test"}, *memoDID, signature)
-		if err == nil {
-			t.Fatal("should report an error when controller is not registered")
-		}
 	}
 
 	// Now register mfile DID (should succeed)
@@ -204,7 +191,7 @@ func TestBasic(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	document, err := resolver.Resolve(mfilecontroller.DID().String())
+	document, err := resolver.Resolve(mfileDID.String())
 	if err != nil {
 		t.Fatal(err.Error())
 	}
